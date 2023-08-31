@@ -32,6 +32,7 @@ my $sketch_dir = "sketches-k${kmer_size}s${sketch_size}";
 my $genomes_dir = "genomes";
 mkdir $sketch_dir unless -d $sketch_dir; 
 mkdir $genomes_dir unless -d $genomes_dir; 
+
 foreach my $domain (@domains) {
     my $domain_dir = "$sketch_dir/$domain";
     my $genome_domain_dir = "$genomes_dir/$domain";
@@ -47,10 +48,18 @@ foreach my $domain (@domains) {
     }
     $line =~ s/^# //;
     my $i = 0;
-    my %header = map { $_ => $i++ } split (/\t/, $line);;
+    my %header = map { $_ => $i++ } split (/\t/, $line);
+
+    die "refseq_category column not found in assembly_summary.txt" unless exists $header{refseq_category};
+
     while ($line = <$F>) {
-        next if $line =~ /^#/;
+        next if $line =~ /^#/;  # Skip comments
         my @dat = split(/\t/, $line);
+        
+        # Only process this line if it's a representative genome
+        next unless $dat[$header{refseq_category}] eq 'representative genome';
+
+        # The rest of your existing code for processing this genome starts here
         my $assembly_accession = $dat[$header{assembly_accession}];
         my $taxid = $dat[$header{taxid}];
         my $organism_name = $dat[$header{organism_name}];
@@ -61,7 +70,7 @@ foreach my $domain (@domains) {
 
         $assembly_level =~ s/ //g;
         $asm_name =~ s/[^A-Za-z0-9.\-\(\)]/_/g;
-        #$asm_name =~ s/__/_/g;
+
         my $url = "$ftp_path/${assembly_accession}_${asm_name}_genomic.fna.gz";
         (my $organism_name1 = $organism_name) =~ s/[^A-Za-z0-9.\-]/_/g;
         my $genome_result_dir = "$genome_domain_dir/$assembly_level";
@@ -71,17 +80,16 @@ foreach my $domain (@domains) {
         sys("curl $url", { output => "$fna_f" , die => 0});
         my $result_sketch_dir = "$domain_dir/$organism_name1-taxid$taxid";
         mkdir $result_sketch_dir unless -d $result_sketch_dir;
+
         if (-f "$fna_f"  && !-f "$result_sketch_dir/$result_basename.msh") {
-        print STDERR "Counting number of sequences in file: ";
-        my $n_seq = `zgrep -c '^>' $fna_f`;
-        chomp $n_seq;
-        my $n_bp = `zgrep -v ">" $fna_f | wc | awk '{ printf "%.2f Mbp",(\$3-\$1)/1000/1000}' `;
-        chomp $n_bp;
-        print STDERR "$n_seq, $n_bp\n";
-        sys("mash sketch -k $kmer_size -s $sketch_size -o $result_sketch_dir/$result_basename -I '$assembly_accession $organism_name, $assembly_level assembly [$n_bp, $n_seq seqs]' -C 'taxid $taxid' $fna_f", { check_file=>"$result_sketch_dir/$result_basename.msh" });
+            print STDERR "Counting number of sequences in file: ";
+            my $n_seq = `zgrep -c '^>' $fna_f`;
+            chomp $n_seq;
+            my $n_bp = `zgrep -v ">" $fna_f | wc | awk '{ printf "%.2f Mbp",(\$3-\$1)/1000/1000}' `;
+            chomp $n_bp;
+            print STDERR "$n_seq, $n_bp\n";
+            sys("mash sketch -k $kmer_size -s $sketch_size -o $result_sketch_dir/$result_basename -I '$assembly_accession $organism_name, $assembly_level assembly [$n_bp, $n_seq seqs]' -C 'taxid $taxid' $fna_f", { check_file=>"$result_sketch_dir/$result_basename.msh" });
         }
     }
     close($F);
 }
-
-
