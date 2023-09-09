@@ -11,9 +11,8 @@ use File::Basename;
 my @domains = qw/archaea bacteria fungi invertebrate plant protozoa vertebrate_mammalian vertebrate_other viral/;
 
 # Check if all required arguments are provided
-
 if (@ARGV < 3) {
-    print "Usage: perl dl-genomes-refseq.pl <DOMAIN> <kmer_size> <sketch_size>. If <kmer_size> <sketch_size> are set to 0, no sketching will be performed\n";
+    print "Usage: perl dl-genomes-versatile.pl <DOMAIN> <kmer_size> <sketch_size>. If <kmer_size> <sketch_size> are set to 0, no sketching will be performed\n";
     exit(1);
 }
 
@@ -27,9 +26,6 @@ my @input_domains = split(',', $input_domains);
 
 
 @input_domains = @domains if $input_domains[0] eq 'all';
-
-
-
 
 
 my ($opt, $usage) = MyGetopt::describe_options(
@@ -71,6 +67,10 @@ foreach my $domain (@input_domains) {
     while ($line = <$F>) {
         next if $line =~ /^#/;
         my @dat = split(/\t/, $line);
+
+        # Only process this line if it's a representative genome
+        next unless $dat[$header{refseq_category}] eq 'representative genome' or $dat[$header{refseq_category}] eq 'reference genome';
+
         my $assembly_accession = $dat[$header{assembly_accession}];
         my $taxid = $dat[$header{taxid}];
         my $organism_name = $dat[$header{organism_name}];
@@ -88,7 +88,9 @@ foreach my $domain (@input_domains) {
         mkdir $genome_result_dir unless -d $genome_result_dir;
         my $result_basename = "$assembly_accession-taxid$taxid-$organism_name1";
         my $fna_f = "$genome_result_dir/${result_basename}_genomic.fna.gz";
+        unless (-e $fna_f) {
         sys("curl $url", { output => "$fna_f" , die => 0});
+        }
         my $result_sketch_dir = "$domain_dir/$organism_name1-taxid$taxid";
         mkdir $result_sketch_dir unless -d $result_sketch_dir;
         if (-f "$fna_f"  && !-f "$result_sketch_dir/$result_basename.msh") {
